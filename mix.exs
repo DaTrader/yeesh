@@ -133,17 +133,17 @@ defmodule Yeesh.MixProject do
 
   defp groups_for_modules do
     [
-      "Core": [
+      Core: [
         Yeesh,
         Yeesh.Command,
         Yeesh.Executor,
         Yeesh.Session,
         Yeesh.Registry
       ],
-      "LiveView": [
+      LiveView: [
         Yeesh.Live.TerminalComponent
       ],
-      "Sandbox": [
+      Sandbox: [
         Yeesh.Sandbox
       ],
       "Built-in Commands": [
@@ -154,7 +154,7 @@ defmodule Yeesh.MixProject do
         Yeesh.Builtin.Help,
         Yeesh.Builtin.History
       ],
-      "Utilities": [
+      Utilities: [
         Yeesh.Completion,
         Yeesh.Output
       ]
