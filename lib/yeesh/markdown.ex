@@ -9,7 +9,7 @@ defmodule Yeesh.Markdown do
 
   - Headings (h1: bold yellow, h2: bold cyan, h3+: bold white)
   - Bold, italic, strikethrough, inline code
-  - Bullet lists (▹ markers) and ordered lists (circled numbers)
+  - Bullet lists (▸ markers) and ordered lists (circled numbers)
   - Code blocks with optional language headers
   - Block quotes (│ prefix)
   - Thematic breaks (horizontal rules)
@@ -141,7 +141,7 @@ defmodule Yeesh.Markdown do
     do: "  ☐ " <> render_item_content(children)
 
   defp render_bullet_item(%MDEx.ListItem{nodes: children}),
-    do: "  ▹ " <> render_item_content(children)
+    do: "  ▸ " <> render_item_content(children)
 
   defp render_bullet_item(other), do: render_block(other)
 
