@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/Oeditus/yeesh/v0.1.0/stuff/img/logo-128x128.jpg" alt="Yeesh" width="128" align="right">
+
 # Yeesh
 
 A LiveView terminal component with sandboxed command execution.

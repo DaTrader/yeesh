@@ -22,7 +22,7 @@ defmodule Yeesh.MixProject do
       dialyzer: [
         plt_file: {:no_warn, ".dialyzer/dialyzer.plt"},
         plt_add_deps: :app_tree,
-        plt_add_apps: [:mix],
+        plt_add_apps: [:mix, :ex_unit],
         plt_core_path: ".dialyzer",
         list_unused_filters: true,
         ignore_warnings: ".dialyzer/ignore.exs"
@@ -64,7 +64,7 @@ defmodule Yeesh.MixProject do
       {:dune, "~> 0.3"},
 
       # Dev / Test
-      {:ex_doc, "~> 0.31", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18", only: :test, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
@@ -87,8 +87,6 @@ defmodule Yeesh.MixProject do
     A LiveView terminal component with sandboxed command execution.
     Provides a browser-based CLI with fish/zsh-like features (tab completion,
     history, prompt customization) and Dune-powered sandboxed Elixir evaluation.
-    Execution is synchronous in the current release; async streaming is planned
-    for Milestone 3. OS command passthrough is planned for Milestone 2.
     """
   end
 
@@ -116,11 +114,50 @@ defmodule Yeesh.MixProject do
   defp docs do
     [
       main: "readme",
+      logo: "stuff/img/logo-48x48.jpg",
+      assets: %{"stuff/img" => "assets"},
+      extras: ["README.md"],
+      extra_section: "GUIDES",
       source_url: @source_url,
       source_ref: "v#{@version}",
       formatters: ["html", "epub"],
-      extras: ["README.md"],
-      authors: ["Aleksei Matiushkin"]
+      groups_for_modules: groups_for_modules(),
+      nest_modules_by_prefix: [
+        Yeesh.Builtin,
+        Yeesh.Live
+      ],
+      authors: ["Aleksei Matiushkin"],
+      canonical: "https://hexdocs.pm/#{@app}"
+    ]
+  end
+
+  defp groups_for_modules do
+    [
+      "Core": [
+        Yeesh,
+        Yeesh.Command,
+        Yeesh.Executor,
+        Yeesh.Session,
+        Yeesh.Registry
+      ],
+      "LiveView": [
+        Yeesh.Live.TerminalComponent
+      ],
+      "Sandbox": [
+        Yeesh.Sandbox
+      ],
+      "Built-in Commands": [
+        Yeesh.Builtin.Clear,
+        Yeesh.Builtin.Echo,
+        Yeesh.Builtin.ElixirEval,
+        Yeesh.Builtin.Env,
+        Yeesh.Builtin.Help,
+        Yeesh.Builtin.History
+      ],
+      "Utilities": [
+        Yeesh.Completion,
+        Yeesh.Output
+      ]
     ]
   end
 end
