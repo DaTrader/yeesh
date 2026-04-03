@@ -89,6 +89,25 @@ const YeeshTerminal = {
     );
     this.writePrompt();
 
+    // Intercept arrow up/down before xterm processes them.
+    // In @xterm/xterm v6+ onKey does not reliably fire for arrow keys,
+    // so we handle history navigation here and return false to prevent
+    // xterm from consuming them.
+    this.term.attachCustomKeyEventHandler((event) => {
+      if (event.type !== "keydown") return true;
+
+      if (event.key === "ArrowUp") {
+        this.pushEventTo(this.el, "yeesh:history_prev", {});
+        return false;
+      }
+      if (event.key === "ArrowDown") {
+        this.pushEventTo(this.el, "yeesh:history_next", {});
+        return false;
+      }
+
+      return true;
+    });
+
     // Key handling
     this.term.onKey(({ key, domEvent }) => {
       this.handleKey(key, domEvent);
@@ -223,17 +242,8 @@ const YeeshTerminal = {
       return;
     }
 
-    // Arrow Up - history previous
-    if (ev.key === "ArrowUp") {
-      this.pushEventTo(this.el, "yeesh:history_prev", {});
-      return;
-    }
-
-    // Arrow Down - history next
-    if (ev.key === "ArrowDown") {
-      this.pushEventTo(this.el, "yeesh:history_next", {});
-      return;
-    }
+    // Arrow Up/Down are handled by attachCustomKeyEventHandler above
+    // to ensure reliable interception across xterm.js versions.
 
     // Arrow Left
     if (ev.key === "ArrowLeft") {

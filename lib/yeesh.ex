@@ -16,6 +16,16 @@ defmodule Yeesh do
         commands={[MyApp.Commands.Deploy, MyApp.Commands.Status]}
       />
 
+  ## Configuration
+
+  The following application-level config options are supported:
+
+    - `:enable_mix_command` - when `true`, registers the built-in `mix`
+      command that allows running arbitrary Mix tasks from the terminal.
+      Defaults to `false`. Enable it in your `config.exs`:
+
+          config :yeesh, enable_mix_command: true
+
   ## Custom Commands
 
   Implement the `Yeesh.Command` behaviour:
@@ -67,7 +77,8 @@ defmodule Yeesh do
       command_timeout: 5_000,
       max_output_size: 100_000,
       sandbox_opts: [],
-      theme: :default
+      theme: :default,
+      enable_mix_command: false
     ]
   end
 

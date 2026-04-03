@@ -87,8 +87,11 @@ defmodule Yeesh.Registry do
   end
 
   defp mix_commands do
-    if Code.ensure_loaded?(Yeesh.Builtin.MixTask),
-      do: [Yeesh.Builtin.MixTask],
-      else: []
+    if Application.get_env(:yeesh, :enable_mix_command, false) &&
+         Code.ensure_loaded?(Yeesh.Builtin.MixTask) do
+      [Yeesh.Builtin.MixTask]
+    else
+      []
+    end
   end
 end
