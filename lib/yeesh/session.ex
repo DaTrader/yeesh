@@ -15,6 +15,7 @@ defmodule Yeesh.Session do
           history: [String.t()],
           history_max_size: pos_integer(),
           history_index: integer(),
+          history_prefix: String.t() | nil,
           env: %{String.t() => String.t()},
           cwd: String.t(),
           prompt: String.t(),
@@ -27,6 +28,7 @@ defmodule Yeesh.Session do
   defstruct history: [],
             history_max_size: 1000,
             history_index: -1,
+            history_prefix: nil,
             env: %{},
             cwd: "/",
             prompt: "$ ",
@@ -67,22 +69,28 @@ defmodule Yeesh.Session do
     GenServer.cast(pid, {:push_history, command})
   end
 
-  @doc "Gets the previous history entry (up arrow)."
-  @spec history_prev(pid()) :: {:ok, String.t()} | :empty
-  def history_prev(pid) do
-    GenServer.call(pid, :history_prev)
+  @doc "Gets the previous history entry (up arrow), optionally filtered by prefix."
+  @spec history_prev(pid(), String.t() | nil) :: {:ok, String.t()} | :empty
+  def history_prev(pid, prefix \\ nil) do
+    GenServer.call(pid, {:history_prev, prefix})
   end
 
-  @doc "Gets the next history entry (down arrow)."
-  @spec history_next(pid()) :: {:ok, String.t()} | :end
-  def history_next(pid) do
-    GenServer.call(pid, :history_next)
+  @doc "Gets the next history entry (down arrow), optionally filtered by prefix."
+  @spec history_next(pid(), String.t() | nil) :: {:ok, String.t()} | :end
+  def history_next(pid, prefix \\ nil) do
+    GenServer.call(pid, {:history_next, prefix})
   end
 
   @doc "Resets the history navigation index."
   @spec reset_history_index(pid()) :: :ok
   def reset_history_index(pid) do
     GenServer.cast(pid, :reset_history_index)
+  end
+
+  @doc "Searches history for entries containing `query`, returning the `skip`-th match."
+  @spec history_search(pid(), String.t(), non_neg_integer()) :: {:ok, String.t()} | :no_match
+  def history_search(pid, query, skip \\ 0) do
+    GenServer.call(pid, {:history_search, query, skip})
   end
 
   @doc "Returns the full history list."
@@ -130,29 +138,50 @@ defmodule Yeesh.Session do
     {:reply, new_state, new_state}
   end
 
-  def handle_call(:history_prev, _from, %{history: []} = state) do
-    {:reply, :empty, state}
-  end
+  def handle_call({:history_prev, prefix}, _from, state) do
+    state = maybe_reset_prefix(state, prefix)
+    filtered = filter_history(state.history, prefix)
 
-  def handle_call(:history_prev, _from, state) do
-    new_index = min(state.history_index + 1, length(state.history) - 1)
+    case filtered do
+      [] ->
+        {:reply, :empty, state}
 
-    case Enum.at(state.history, new_index) do
-      nil -> {:reply, :empty, state}
-      entry -> {:reply, {:ok, entry}, %{state | history_index: new_index}}
+      _ ->
+        new_index = min(state.history_index + 1, length(filtered) - 1)
+
+        case Enum.at(filtered, new_index) do
+          nil -> {:reply, :empty, state}
+          entry -> {:reply, {:ok, entry}, %{state | history_index: new_index}}
+        end
     end
   end
 
-  def handle_call(:history_next, _from, state) do
+  def handle_call({:history_next, prefix}, _from, state) do
+    state = maybe_reset_prefix(state, prefix)
     new_index = state.history_index - 1
 
     if new_index < 0 do
       {:reply, :end, %{state | history_index: -1}}
     else
-      case Enum.at(state.history, new_index) do
+      filtered = filter_history(state.history, prefix)
+
+      case Enum.at(filtered, new_index) do
         nil -> {:reply, :end, %{state | history_index: -1}}
         entry -> {:reply, {:ok, entry}, %{state | history_index: new_index}}
       end
+    end
+  end
+
+  def handle_call({:history_search, query, skip}, _from, state) do
+    result =
+      state.history
+      |> Enum.filter(&String.contains?(&1, query))
+      |> Enum.drop(skip)
+      |> List.first()
+
+    case result do
+      nil -> {:reply, :no_match, state}
+      entry -> {:reply, {:ok, entry}, state}
     end
   end
 
@@ -179,18 +208,37 @@ defmodule Yeesh.Session do
   def handle_cast({:push_history, command}, state) do
     trimmed = String.trim(command)
 
-    if trimmed == "" do
-      {:noreply, state}
-    else
-      history =
-        [trimmed | state.history]
-        |> Enum.take(state.history_max_size)
+    cond do
+      trimmed == "" ->
+        {:noreply, state}
 
-      {:noreply, %{state | history: history, history_index: -1}}
+      match?([^trimmed | _], state.history) ->
+        {:noreply, %{state | history_index: -1, history_prefix: nil}}
+
+      true ->
+        history =
+          [trimmed | state.history]
+          |> Enum.take(state.history_max_size)
+
+        {:noreply, %{state | history: history, history_index: -1, history_prefix: nil}}
     end
   end
 
   def handle_cast(:reset_history_index, state) do
-    {:noreply, %{state | history_index: -1}}
+    {:noreply, %{state | history_index: -1, history_prefix: nil}}
   end
+
+  defp maybe_reset_prefix(state, prefix) do
+    if prefix != state.history_prefix do
+      %{state | history_index: -1, history_prefix: prefix}
+    else
+      state
+    end
+  end
+
+  defp filter_history(history, nil), do: history
+  defp filter_history(history, ""), do: history
+
+  defp filter_history(history, prefix),
+    do: Enum.filter(history, &String.starts_with?(&1, prefix))
 end

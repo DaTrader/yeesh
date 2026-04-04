@@ -5,7 +5,9 @@
  * - Local line editing (cursor, backspace, delete, home/end)
  * - Command submission on Enter
  * - Tab completion
- * - History navigation (up/down arrows)
+ * - History navigation (up/down arrows, Ctrl+P/N, Shift+Ctrl+P/N)
+ * - Reverse incremental search (Ctrl+R)
+ * - Clipboard: Shift+Ctrl+C (copy), Shift+Ctrl+V (paste), Shift+Ctrl+X (cut)
  * - Ctrl+C (interrupt), Ctrl+L (clear)
  *
  * Communicates with Yeesh.Live.TerminalComponent via pushEvent/handleEvent.
@@ -62,6 +64,17 @@ const YeeshTerminal = {
     this.prompt = this.el.dataset.prompt || "$ ";
     this.knownCommands = JSON.parse(this.el.dataset.commands || "[]");
 
+    // Reverse-i-search state
+    this.searchMode = false;
+    this.searchQuery = "";
+    this.searchSkip = 0;
+    this.searchMatch = "";
+    this.savedInputBuffer = "";
+    this.savedCursorPos = 0;
+
+    // Prefix-filtered history navigation (fish-style)
+    this.historyPrefix = null;
+
     const themeName = this.el.dataset.theme || "default";
     const theme = THEMES[themeName] || THEMES.default;
 
@@ -89,19 +102,196 @@ const YeeshTerminal = {
     );
     this.writePrompt();
 
-    // Intercept arrow up/down before xterm processes them.
-    // In @xterm/xterm v6+ onKey does not reliably fire for arrow keys,
-    // so we handle history navigation here and return false to prevent
-    // xterm from consuming them.
+    // Intercept keys before xterm processes them.
+    // Handles arrow history navigation, Ctrl+R search, and Ctrl+P/N.
     this.term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") return true;
 
+      // --- Shift+Ctrl+C / V / X: clipboard operations ---
+      if (event.ctrlKey && event.shiftKey) {
+        if (event.key === "C") {
+          event.preventDefault();
+          const sel = this.term.getSelection();
+          if (sel) {
+            navigator.clipboard.writeText(sel);
+            this.term.clearSelection();
+          }
+          return false;
+        }
+        if (event.key === "V") {
+          event.preventDefault();
+          navigator.clipboard.readText().then((text) => this.pasteText(text));
+          return false;
+        }
+        if (event.key === "X") {
+          event.preventDefault();
+          const sel = this.term.getSelection();
+          if (sel) {
+            navigator.clipboard.writeText(sel);
+            this.term.clearSelection();
+          }
+          return false;
+        }
+        // Shift+Ctrl+P / N: history prev/next (browser-safe alternative)
+        if (event.key === "P") {
+          event.preventDefault();
+          if (this.searchMode) this.exitSearchMode(true);
+          if (this.historyPrefix === null)
+            this.historyPrefix = this.inputBuffer;
+          this.pushEventTo(this.el, "yeesh:history_prev", {
+            prefix: this.historyPrefix,
+          });
+          return false;
+        }
+        if (event.key === "N") {
+          event.preventDefault();
+          if (this.searchMode) this.exitSearchMode(true);
+          if (this.historyPrefix === null)
+            this.historyPrefix = this.inputBuffer;
+          this.pushEventTo(this.el, "yeesh:history_next", {
+            prefix: this.historyPrefix,
+          });
+          return false;
+        }
+      }
+
+      // --- Ctrl+R: enter or cycle reverse-i-search ---
+      if (event.ctrlKey && event.key === "r") {
+        event.preventDefault();
+        if (!this.searchMode) {
+          this.enterSearchMode();
+        } else {
+          this.searchSkip++;
+          this.pushEventTo(this.el, "yeesh:history_search", {
+            query: this.searchQuery,
+            skip: this.searchSkip,
+          });
+        }
+        return false;
+      }
+
+      // --- Ctrl+P / Ctrl+N: history prev/next (also exits search) ---
+      if (event.ctrlKey && event.key === "p") {
+        event.preventDefault();
+        if (this.searchMode) this.exitSearchMode(true);
+        if (this.historyPrefix === null) this.historyPrefix = this.inputBuffer;
+        this.pushEventTo(this.el, "yeesh:history_prev", {
+          prefix: this.historyPrefix,
+        });
+        return false;
+      }
+      if (event.ctrlKey && event.key === "n") {
+        event.preventDefault();
+        if (this.searchMode) this.exitSearchMode(true);
+        if (this.historyPrefix === null) this.historyPrefix = this.inputBuffer;
+        this.pushEventTo(this.el, "yeesh:history_next", {
+          prefix: this.historyPrefix,
+        });
+        return false;
+      }
+
+      // --- When in search mode, consume all keys here ---
+      if (this.searchMode) {
+        event.preventDefault();
+
+        // Escape / Ctrl+G: cancel search, restore original input
+        if (event.key === "Escape" || (event.ctrlKey && event.key === "g")) {
+          this.exitSearchMode(false);
+          return false;
+        }
+
+        // Enter: accept match and execute
+        if (event.key === "Enter") {
+          this.exitSearchMode(true);
+          this.term.writeln("");
+          const input = this.inputBuffer;
+          this.inputBuffer = "";
+          this.cursorPos = 0;
+          this.historyPrefix = null;
+          if (input.trim().length > 0) {
+            this.pushEventTo(this.el, "yeesh:input", { input });
+          } else {
+            this.writePrompt();
+          }
+          return false;
+        }
+
+        // Tab / ArrowRight / ArrowLeft: accept match, stay on line
+        if (
+          event.key === "Tab" ||
+          event.key === "ArrowRight" ||
+          event.key === "ArrowLeft"
+        ) {
+          this.exitSearchMode(true);
+          return false;
+        }
+
+        // Ctrl+C: cancel search + interrupt
+        if (event.ctrlKey && event.key === "c") {
+          this.exitSearchMode(false);
+          this.term.write("^C\r\n");
+          this.inputBuffer = "";
+          this.cursorPos = 0;
+          this.historyPrefix = null;
+          this.pushEventTo(this.el, "yeesh:interrupt", {});
+          this.writePrompt();
+          return false;
+        }
+
+        // Backspace: shorten query
+        if (event.key === "Backspace") {
+          if (this.searchQuery.length > 0) {
+            this.searchQuery = this.searchQuery.slice(0, -1);
+            this.searchSkip = 0;
+            if (this.searchQuery.length > 0) {
+              this.pushEventTo(this.el, "yeesh:history_search", {
+                query: this.searchQuery,
+                skip: 0,
+              });
+            } else {
+              this.searchMatch = "";
+              this.renderSearchLine();
+            }
+          } else {
+            // Empty query + backspace exits search
+            this.exitSearchMode(false);
+          }
+          return false;
+        }
+
+        // Printable character: append to search query
+        if (
+          !event.ctrlKey &&
+          !event.altKey &&
+          !event.metaKey &&
+          event.key.length === 1
+        ) {
+          this.searchQuery += event.key;
+          this.searchSkip = 0;
+          this.pushEventTo(this.el, "yeesh:history_search", {
+            query: this.searchQuery,
+            skip: 0,
+          });
+          return false;
+        }
+
+        // Consume everything else while in search mode
+        return false;
+      }
+
+      // --- Normal mode: arrow key history navigation ---
       if (event.key === "ArrowUp") {
-        this.pushEventTo(this.el, "yeesh:history_prev", {});
+        if (this.historyPrefix === null) this.historyPrefix = this.inputBuffer;
+        this.pushEventTo(this.el, "yeesh:history_prev", {
+          prefix: this.historyPrefix,
+        });
         return false;
       }
       if (event.key === "ArrowDown") {
-        this.pushEventTo(this.el, "yeesh:history_next", {});
+        if (this.historyPrefix === null) this.historyPrefix = this.inputBuffer;
+        this.pushEventTo(this.el, "yeesh:history_next", {
+          prefix: this.historyPrefix,
+        });
         return false;
       }
 
@@ -153,9 +343,25 @@ const YeeshTerminal = {
 
     this.handleEvent("yeesh:history", ({ entry }) => {
       this.clearInput();
-      this.inputBuffer = entry;
-      this.cursorPos = entry.length;
-      this.term.write(entry);
+      if (entry === "" && this.historyPrefix !== null) {
+        // Navigated past newest match: restore original typed input
+        const restored = this.historyPrefix;
+        this.historyPrefix = null;
+        this.inputBuffer = restored;
+        this.cursorPos = restored.length;
+        this.term.write(restored);
+      } else {
+        this.inputBuffer = entry;
+        this.cursorPos = entry.length;
+        this.term.write(entry);
+      }
+    });
+
+    this.handleEvent("yeesh:search_result", ({ entry, found }) => {
+      if (this.searchMode) {
+        this.searchMatch = found ? entry : "";
+        this.renderSearchLine();
+      }
     });
   },
 
@@ -173,6 +379,17 @@ const YeeshTerminal = {
     const printable =
       !ev.altKey && !ev.ctrlKey && !ev.metaKey && ev.key.length === 1;
 
+    // Any input-modifying key resets prefix-filtered history navigation
+    const resetsPrefix =
+      printable ||
+      ev.key === "Enter" ||
+      ev.key === "Backspace" ||
+      ev.key === "Delete" ||
+      (ev.ctrlKey && ev.key === "c");
+    if (resetsPrefix) {
+      this.historyPrefix = null;
+    }
+
     // Ctrl+C - interrupt
     if (ev.ctrlKey && ev.key === "c") {
       this.term.write("^C\r\n");
@@ -183,11 +400,9 @@ const YeeshTerminal = {
       return;
     }
 
-    // Ctrl+L - clear screen
+    // Ctrl+L - clear screen (preserves current line)
     if (ev.ctrlKey && ev.key === "l") {
       this.term.clear();
-      this.writePrompt();
-      this.term.write(this.inputBuffer);
       return;
     }
 
@@ -310,6 +525,90 @@ const YeeshTerminal = {
     this.term.write("\x1b[K");
     this.inputBuffer = "";
     this.cursorPos = 0;
+  },
+
+  enterSearchMode() {
+    this.searchMode = true;
+    this.searchQuery = "";
+    this.searchSkip = 0;
+    this.searchMatch = "";
+    this.savedInputBuffer = this.inputBuffer;
+    this.savedCursorPos = this.cursorPos;
+    this.renderSearchLine();
+  },
+
+  exitSearchMode(accept) {
+    this.searchMode = false;
+    // Clear entire line
+    this.term.write("\r\x1b[K");
+
+    if (accept && this.searchMatch) {
+      this.inputBuffer = this.searchMatch;
+      this.cursorPos = this.searchMatch.length;
+    } else {
+      this.inputBuffer = this.savedInputBuffer;
+      this.cursorPos = this.savedCursorPos;
+    }
+
+    this.writePrompt();
+    this.term.write(this.inputBuffer);
+    // Reposition cursor if not at end
+    const trail = this.inputBuffer.length - this.cursorPos;
+    if (trail > 0) {
+      this.term.write("\x1b[" + trail + "D");
+    }
+  },
+
+  renderSearchLine() {
+    this.term.write("\r\x1b[K");
+    const label = "(reverse-i-search)'" + this.searchQuery + "': ";
+    this.term.write(label + this.searchMatch);
+
+    // Keep inputBuffer in sync so Enter can submit immediately
+    if (this.searchMatch) {
+      this.inputBuffer = this.searchMatch;
+      this.cursorPos = this.searchMatch.length;
+    }
+  },
+
+  /**
+   * Insert text at the current cursor position (used by paste).
+   * Newlines are collapsed to spaces; control characters are stripped.
+   */
+  pasteText(text) {
+    if (!text) return;
+
+    if (this.searchMode) {
+      this.searchQuery += text.replace(/[\r\n]+/g, " ").replace(/[\x00-\x1f\x7f]/g, "");
+      this.searchSkip = 0;
+      if (this.searchQuery.length > 0) {
+        this.pushEventTo(this.el, "yeesh:history_search", {
+          query: this.searchQuery,
+          skip: 0,
+        });
+      } else {
+        this.searchMatch = "";
+        this.renderSearchLine();
+      }
+      return;
+    }
+
+    const sanitized = text
+      .replace(/[\r\n]+/g, " ")
+      .replace(/[\x00-\x1f\x7f]/g, "");
+    if (!sanitized) return;
+
+    const before = this.inputBuffer.slice(0, this.cursorPos);
+    const after = this.inputBuffer.slice(this.cursorPos);
+    this.inputBuffer = before + sanitized + after;
+    this.cursorPos += sanitized.length;
+    this.historyPrefix = null;
+
+    if (after.length > 0) {
+      this.term.write(sanitized + after + "\b".repeat(after.length));
+    } else {
+      this.term.write(sanitized);
+    }
   },
 };
 

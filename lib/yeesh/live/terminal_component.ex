@@ -29,11 +29,13 @@ defmodule Yeesh.Live.TerminalComponent do
 
     - `"yeesh:input"` - user submitted a command line
     - `"yeesh:complete"` - tab completion request
-    - `"yeesh:history_prev"` - up arrow
-    - `"yeesh:history_next"` - down arrow
+    - `"yeesh:history_prev"` - up arrow / Ctrl+P
+    - `"yeesh:history_next"` - down arrow / Ctrl+N
+    - `"yeesh:history_search"` - Ctrl+R reverse incremental search
     - `"yeesh:interrupt"` - Ctrl+C
     - `"yeesh:output"` - pushed to client with command output
     - `"yeesh:completion"` - pushed to client with completions
+    - `"yeesh:search_result"` - pushed to client with search match
     - `"yeesh:prompt"` - pushed to client with new prompt
   """
 
@@ -127,9 +129,11 @@ defmodule Yeesh.Live.TerminalComponent do
     end
   end
 
-  def handle_event("yeesh:history_prev", _params, socket) do
+  def handle_event("yeesh:history_prev", params, socket) do
+    prefix = params["prefix"]
+
     if session_pid = socket.assigns[:session_pid] do
-      case Session.history_prev(session_pid) do
+      case Session.history_prev(session_pid, prefix) do
         {:ok, entry} ->
           {:noreply, push_event(socket, "yeesh:history", %{entry: entry})}
 
@@ -141,14 +145,30 @@ defmodule Yeesh.Live.TerminalComponent do
     end
   end
 
-  def handle_event("yeesh:history_next", _params, socket) do
+  def handle_event("yeesh:history_next", params, socket) do
+    prefix = params["prefix"]
+
     if session_pid = socket.assigns[:session_pid] do
-      case Session.history_next(session_pid) do
+      case Session.history_next(session_pid, prefix) do
         {:ok, entry} ->
           {:noreply, push_event(socket, "yeesh:history", %{entry: entry})}
 
         :end ->
           {:noreply, push_event(socket, "yeesh:history", %{entry: ""})}
+      end
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_event("yeesh:history_search", %{"query" => query, "skip" => skip}, socket) do
+    if session_pid = socket.assigns[:session_pid] do
+      case Session.history_search(session_pid, query, skip) do
+        {:ok, entry} ->
+          {:noreply, push_event(socket, "yeesh:search_result", %{entry: entry, found: true})}
+
+        :no_match ->
+          {:noreply, push_event(socket, "yeesh:search_result", %{entry: "", found: false})}
       end
     else
       {:noreply, socket}

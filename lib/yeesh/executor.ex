@@ -26,13 +26,19 @@ defmodule Yeesh.Executor do
     if input == "" do
       {"", session}
     else
+      result =
+        case session.mode do
+          :elixir_repl -> execute_elixir_repl(input, session, session_pid)
+          :mix_task -> execute_mix_task(input, session, session_pid)
+          :normal -> execute_normal(input, session, session_pid)
+        end
+
+      # Push history after execution so the cast is processed after any
+      # synchronous Session.update/2 calls made during dispatch, avoiding
+      # the history entry being overwritten by a full-state replacement.
       Session.push_history(session_pid, input)
 
-      case session.mode do
-        :elixir_repl -> execute_elixir_repl(input, session, session_pid)
-        :mix_task -> execute_mix_task(input, session, session_pid)
-        :normal -> execute_normal(input, session, session_pid)
-      end
+      result
     end
   end
 
