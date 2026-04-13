@@ -47,6 +47,13 @@ import "phoenix-colocated/yeesh"
 Insert the import line high above in the `app.js`, ideally immediately after the
 `import {LiveSocket} from "phoenix_live_view"` line.
 
+Under the `<link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />`
+line in your `root.html.heex` add the following line:
+
+```CSS
+<Yeesh.Live.TerminalComponent.xterm_style/>
+```
+
 ## Quick Start
 
 Add the terminal component to any LiveView:
