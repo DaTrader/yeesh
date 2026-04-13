@@ -47,10 +47,10 @@ defmodule Yeesh.Live.TerminalComponent do
   alias Yeesh.{Completion, Executor, Registry, Session}
 
   @welcome_message Application.compile_env(
-    :yeesh,
-    :welcome_message,
-    "\x1b[1;36mYeesh\x1b[0m - sandboxed terminal (type \x1b[1mhelp\x1b[0m for commands)"
-  )
+                     :yeesh,
+                     :welcome_message,
+                     "\x1b[1;36mYeesh\x1b[0m - sandboxed terminal (type \x1b[1mhelp\x1b[0m for commands)"
+                   )
 
   @impl true
   def update(assigns, socket) do
@@ -58,12 +58,12 @@ defmodule Yeesh.Live.TerminalComponent do
 
     socket =
       socket
-      |> assign( :final_prompt, get_prompt( socket.assigns))
-      |> assign_new( :session_pid, fn -> nil end)
-      |> assign_new( :commands, fn -> nil end)
-      |> assign_new( :theme, fn -> :default end)
-      |> assign_new( :resize_event, fn -> nil end)
-      |> assign_new( :welcome_message, fn -> @welcome_message end)
+      |> assign(:final_prompt, get_prompt(socket.assigns))
+      |> assign_new(:session_pid, fn -> nil end)
+      |> assign_new(:commands, fn -> nil end)
+      |> assign_new(:theme, fn -> :default end)
+      |> assign_new(:resize_event, fn -> nil end)
+      |> assign_new(:welcome_message, fn -> @welcome_message end)
 
     socket =
       if socket.assigns[:session_pid] == nil and connected?(socket) do
@@ -107,7 +107,7 @@ defmodule Yeesh.Live.TerminalComponent do
     """
   end
 
-  embed_templates "terminal_component/*"
+  embed_templates("terminal_component/*")
 
   @impl true
   def handle_event("yeesh:input", %{"input" => input}, socket) do
