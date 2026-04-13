@@ -27,6 +27,31 @@ defmodule Yeesh.Command do
           {:ok, "pong", session}
         end
       end
+
+  ## Explicit group
+
+  Implement the optional `group/0` callback to control how the command
+  is grouped in the `help` output. Without it, grouping is derived from
+  the command name (split on `.`, `-`, or `_`).
+
+      defmodule MyApp.Commands.Migrate do
+        @behaviour Yeesh.Command
+
+        @impl true
+        def name, do: "db.migrate"
+
+        @impl true
+        def group, do: "Database"
+
+        @impl true
+        def description, do: "Run database migrations"
+
+        @impl true
+        def usage, do: "db.migrate [--step N]"
+
+        @impl true
+        def execute(_args, session), do: {:ok, "Migrated", session}
+      end
   """
 
   @type session :: Yeesh.Session.t()
@@ -47,6 +72,19 @@ defmodule Yeesh.Command do
   @callback completions(partial :: String.t(), session :: session()) :: [String.t()]
 
   @doc """
+  Returns the group name for the `help` command output.
+
+  When implemented, this takes precedence over the automatic grouping
+  derived from the command name. The returned string is used as-is
+  for the group header.
+
+  When not implemented, commands are grouped by splitting the name on
+  `.`, `-`, or `_` and capitalizing the first segment. Commands with
+  no separator appear under "Generic".
+  """
+  @callback group() :: String.t()
+
+  @doc """
   Executes the command with the given arguments.
 
   Returns `{:ok, output, updated_session}` on success,
@@ -61,5 +99,5 @@ defmodule Yeesh.Command do
               {:ok, output :: String.t(), session()}
               | {:error, reason :: String.t(), session()}
 
-  @optional_callbacks [completions: 2]
+  @optional_callbacks [completions: 2, group: 0]
 end

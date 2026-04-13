@@ -91,5 +91,29 @@ defmodule Yeesh.Builtin.HelpTest do
       zulu_pos = :binary.match(output, "Zulu:") |> elem(0)
       assert builtin_pos < zulu_pos
     end
+
+    test "group/0 callback overrides automatic grouping" do
+      defmodule CustomGroupCmd do
+        @behaviour Yeesh.Command
+        def name, do: "db.migrate"
+        def description, do: "Run migrations"
+        def usage, do: "db.migrate"
+        def group, do: "Database"
+        def execute(_args, session), do: {:ok, "", session}
+      end
+
+      Registry.register(CustomGroupCmd)
+      {:ok, output, _session} = Help.execute([], %Session{})
+      assert output =~ "Database:"
+      refute output =~ "Db:"
+    end
+
+    test "group/0 callback does not affect builtin classification" do
+      # Builtins are always "Built-in" regardless of group/0
+      Registry.register_all(Registry.resolve_builtins(:all))
+      {:ok, output, _session} = Help.execute([], %Session{})
+      assert output =~ "Built-in:"
+      assert output =~ "help"
+    end
   end
 end

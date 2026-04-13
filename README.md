@@ -153,6 +153,8 @@ Command names may contain dots (`.`), dashes (`-`), and underscores (`_`) as
 separators. The text before the first separator determines the group:
 
 - **Built-in commands** are always grouped under "Built-in".
+- **Commands that implement `group/0`** use the returned string as the group
+  name (takes precedence over automatic grouping).
 - **Commands without a separator** (e.g. `deploy`) appear under "Generic".
 - **Commands with a separator** are grouped by their prefix, capitalized.
   For example, `db.migrate`, `db-seed`, and `db_status` all appear under "Db".
@@ -160,7 +162,35 @@ separators. The text before the first separator determines the group:
 Groups are displayed in order: Built-in first, Generic second, then custom
 groups alphabetically.
 
-Example `help` output with mixed commands:
+### Explicit groups
+
+Implement the optional `group/0` callback to override automatic grouping:
+
+```elixir
+defmodule MyApp.Commands.Migrate do
+  @behaviour Yeesh.Command
+
+  @impl true
+  def name, do: "db.migrate"
+
+  @impl true
+  def group, do: "Database"
+
+  @impl true
+  def description, do: "Run database migrations"
+
+  @impl true
+  def usage, do: "db.migrate [--step N]"
+
+  @impl true
+  def execute(_args, session), do: {:ok, "Migrated", session}
+end
+```
+
+Without `group/0`, this command would appear under "Db" (derived from the
+name prefix). With it, it appears under "Database" instead.
+
+### Example output
 
 ```
 Built-in:
@@ -170,7 +200,7 @@ Built-in:
 Generic:
   deploy          Deploy the application
 
-Db:
+Database:
   db.migrate      Run database migrations
   db.seed         Seed the database
 

@@ -7,6 +7,9 @@ defmodule Yeesh.Builtin.Help do
 
     - Built-in commands (from `Yeesh.Registry.builtin_commands/0`) are
       grouped under **"Built-in"**.
+    - Commands that implement the optional `c:Yeesh.Command.group/0`
+      callback are grouped under the returned string (takes precedence
+      over automatic grouping).
     - Consumer commands whose name contains no separator (`.`, `-`, `_`)
       are grouped under **"Generic"**.
     - Consumer commands with a separator are grouped by the text before
@@ -79,13 +82,18 @@ defmodule Yeesh.Builtin.Help do
   end
 
   defp group_key({_name, module}) do
-    if builtin?(module) do
-      "Built-in"
-    else
-      case Regex.split(@separator_pattern, module.name(), parts: 2) do
-        [_single] -> "Generic"
-        [prefix | _] -> String.capitalize(prefix)
-      end
+    cond do
+      builtin?(module) ->
+        "Built-in"
+
+      function_exported?(module, :group, 0) ->
+        module.group()
+
+      true ->
+        case Regex.split(@separator_pattern, module.name(), parts: 2) do
+          [_single] -> "Generic"
+          [prefix | _] -> String.capitalize(prefix)
+        end
     end
   end
 
