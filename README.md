@@ -35,25 +35,22 @@ end
 Install the JavaScript dependencies:
 
 ```bash
-npm install --prefix assets @xterm/xterm @xterm/addon-fit @xterm/addon-web-links
+npm install --prefix assets @xterm/xterm @xterm/addon-fit @xterm/addon-web-links lit
 ```
 
-Register the hook in your `app.js`:
+Import the Yeesh terminal web component into your `app.js`:
 
 ```javascript
-import { YeeshTerminal } from "../../deps/yeesh/assets/js/yeesh/hook.js"
-
-let liveSocket = new LiveSocket("/live", Socket, {
-  hooks: { YeeshTerminal }
-})
+import "phoenix-colocated/yeesh"
 ```
 
-The hook imports `@xterm/xterm/css/xterm.css`, which esbuild extracts into a
-separate CSS bundle alongside your `app.js` output. Add a second stylesheet
-link in your `root.html.heex` to load it:
+Insert the import line high above in the `app.js`, ideally immediately after the
+`import {LiveSocket} from "phoenix_live_view"` line.
 
-```html
-<link phx-track-static rel="stylesheet" href={~p"/assets/js/app.css"} />
+Import the xterm CSS stylesheet into your `app.css`:
+
+```CSS
+@import "xterm.css";
 ```
 
 ## Quick Start

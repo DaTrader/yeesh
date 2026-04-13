@@ -12,6 +12,7 @@ defmodule Yeesh.MixProject do
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
+      compilers: [ :phoenix_live_view] ++ Mix.compilers(),
       consolidate_protocols: Mix.env() not in [:dev, :test],
       deps: deps(),
       description: description(),
