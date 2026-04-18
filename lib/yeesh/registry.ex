@@ -86,7 +86,8 @@ defmodule Yeesh.Registry do
   defp do_match_command([], _acc, best), do: best
 
   defp do_match_command([token | rest], acc, best) do
-    candidate = Enum.join(acc, " ") <> " " <> token
+    candidate_tokens = acc + [token]
+    candidate = Enum.join(candidate_tokens, " ")
 
     new_best =
       case :ets.lookup(@table, candidate) do
