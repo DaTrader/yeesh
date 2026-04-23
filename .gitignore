@@ -25,3 +25,5 @@ yeesh-*.tar
 /.elixir-tools/
 /.elixir_ls/
 /.erl.history/
+
+/.dialyzer/*plt*

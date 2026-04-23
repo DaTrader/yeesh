@@ -25,6 +25,8 @@ defmodule Yeesh.Builtin.Help do
 
   alias Yeesh.{Output, Registry}
 
+  @max_command_length Application.compile_env(:yeesh, :max_command_length, 16)
+
   @impl true
   def name, do: "help"
 
@@ -109,7 +111,7 @@ defmodule Yeesh.Builtin.Help do
       commands
       |> Enum.map(fn {cmd_name, _} -> String.length(cmd_name) end)
       |> Enum.max()
-      |> max(14)
+      |> max(@max_command_length - 2)
       |> Kernel.+(2)
 
     Enum.map_join(commands, "\r\n", fn {cmd_name, module} ->

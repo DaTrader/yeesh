@@ -58,6 +58,11 @@ jobs:
     name: Code Quality
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        elixir: ['1.17']
+        otp: ['27']
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -65,8 +70,8 @@ jobs:
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
-          elixir-version: '1.17'
-          otp-version: '27'
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
 
       - name: Restore dependencies cache
         uses: actions/cache@v4
@@ -74,9 +79,9 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-quality-${{ hashFiles('**/mix.lock') }}
+          key: ${{ runner.os }}-mix-quality-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mix-quality-
+            ${{ runner.os }}-mix-quality-${{ matrix.elixir }}-${{ matrix.otp }}-
 
       - name: Install dependencies
         run: mix deps.get
@@ -84,16 +89,29 @@ jobs:
       - name: Compile for dialyzer
         run: mix compile
 
+      - name: Create PLT directory
+        run: mkdir -p .dialyzer
+
       - name: Restore PLT cache
-        uses: actions/cache@v4
+        id: plt-cache
+        uses: actions/cache/restore@v4
         with:
           path: .dialyzer
-          key: ${{ runner.os }}-plt-${{ hashFiles('**/mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-plt-
+          key: ${{ runner.os }}-plt-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
+
+      - name: Build PLT (if cache missed)
+        if: steps.plt-cache.outputs.cache-hit != 'true'
+        run: mix dialyzer --plt
+
+      - name: Save PLT cache
+        if: steps.plt-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .dialyzer
+          key: ${{ runner.os }}-plt-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
 
       - name: Run Dialyzer
-        run: mix dialyzer --format github
+        run: mix dialyzer --format github --no-check
 
       - name: Run Credo (static analysis)
         run: mix credo --strict || true
